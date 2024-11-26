@@ -40,5 +40,5 @@ Modular and extensible design
 Error handling and logging
 Easy to customize and scale
 
-📄 License
+📄 License 
 MIT License
