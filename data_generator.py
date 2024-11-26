@@ -3,31 +3,25 @@ import numpy as np
 from faker import Faker
 import logging
 import pandas as pd
-
-# Logging Configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s: %(message)s',
-    filename='real_estate_data_generation.log'
-)
-
-class ConfigManager:
-    @staticmethod
-    def load_config():
-        return {
-            'database': {
-                'host': 'localhost',          # change as needed
-                'user': 'your_username',      # change as needed
-                'password': 'your_password',  # change as needed
-                'database': 'your_database'   # change as needed
-            }
-        }
+from config import ConfigManager
 
 class RealEstateDataGenerator:
-    def __init__(self):
+    def __init__(self, config=None):
         self.fake = Faker('en_IN')
-        self.config = ConfigManager.load_config()
-        self.LOCALITIES = ['CIDCO', 'Garkheda', 'Samarth Nagar', 'Kranti Chowk', 'Bypass Road']
+        self.config = config or ConfigManager.load_config()
+        self.LOCALITIES = [
+            'CIDCO', 'Garkheda', 'Samarth Nagar', 
+            'Kranti Chowk', 'Bypass Road'
+        ]
+        self._setup_logging()
+
+    def _setup_logging(self):
+        log_config = ConfigManager.get_logging_config()
+        logging.basicConfig(
+            level=getattr(logging, log_config['level']),
+            format=log_config['format'],
+            filename=log_config['filename']
+        )
 
     def generate_properties(self, num_properties=500):
         return [
@@ -47,25 +41,21 @@ class RealEstateDataGenerator:
         return df.to_dict('records')
 
     def generate_transactions(self, num_transactions=100):
-        """Generates dummy transaction data for properties."""
         return [
             {
-                'property_id': np.random.randint(1, 501),  # Updated to match increased properties
+                'property_id': np.random.randint(1, 501),
                 'transaction_date': self.fake.date_between(start_date='-5y', end_date='today'),
                 'transaction_amount': round(np.random.uniform(1000000, 10000000), 2)
-            }
-            for _ in range(num_transactions)
+            } for _ in range(num_transactions)
         ]
 
     def generate_market_trends(self):
-        """Generates dummy market trend data."""
         return [
             {
                 'year': year,
                 'location': location,
                 'avg_price_per_sqft': round(np.random.uniform(3000, 15000), 2)
-            }
-            for year in range(2010, 2024)  # Expanded year range
+            } for year in range(2010, 2024)
             for location in self.LOCALITIES
         ]
 
@@ -74,7 +64,7 @@ class RealEstateDataGenerator:
             conn = mysql.connector.connect(**self.config['database'])
             cursor = conn.cursor(dictionary=True)
 
-            # Generate, clean, and insert properties
+            # Properties Insertion
             properties = self.clean_properties(self.generate_properties())
             cursor.executemany("""
                 INSERT INTO Properties 
@@ -83,7 +73,7 @@ class RealEstateDataGenerator:
             """, properties)
             conn.commit()
 
-            # Generate and insert transactions
+            # Transactions Insertion
             transactions = self.generate_transactions()
             cursor.executemany("""
                 INSERT INTO Transactions 
@@ -92,7 +82,7 @@ class RealEstateDataGenerator:
             """, transactions)
             conn.commit()
 
-            # Generate and insert market trends
+            # Market Trends Insertion
             market_trends = self.generate_market_trends()
             cursor.executemany("""
                 INSERT INTO MarketTrends 
@@ -108,5 +98,13 @@ class RealEstateDataGenerator:
         except Exception as e:
             logging.error(f"Unexpected Error: {e}")
 
+def main():
+    try:
+        generator = RealEstateDataGenerator()
+        generator.insert_data()
+        print("Data generation completed successfully!")
+    except Exception as e:
+        print(f"Error in data generation: {e}")
+
 if __name__ == "__main__":
-    RealEstateDataGenerator().insert_data()
+    main()
