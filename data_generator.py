@@ -1,27 +1,23 @@
-import mysql.connector
 import numpy as np
 from faker import Faker
-import logging
 import pandas as pd
+import logging
 from config import ConfigManager
+import mysql.connector
+import matplotlib.pyplot as plt
+
+# Logging Configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s: %(message)s',
+    filename=ConfigManager.get_logging_config()['filename']
+)
 
 class RealEstateDataGenerator:
-    def __init__(self, config=None):
+    def __init__(self):
         self.fake = Faker('en_IN')
-        self.config = config or ConfigManager.load_config()
-        self.LOCALITIES = [
-            'CIDCO', 'Garkheda', 'Samarth Nagar', 
-            'Kranti Chowk', 'Bypass Road'
-        ]
-        self._setup_logging()
-
-    def _setup_logging(self):
-        log_config = ConfigManager.get_logging_config()
-        logging.basicConfig(
-            level=getattr(logging, log_config['level']),
-            format=log_config['format'],
-            filename=log_config['filename']
-        )
+        self.config = ConfigManager.load_config()
+        self.LOCALITIES = ['CIDCO', 'Garkheda', 'Samarth Nagar', 'Kranti Chowk', 'Bypass Road']
 
     def generate_properties(self, num_properties=500):
         return [
@@ -41,21 +37,25 @@ class RealEstateDataGenerator:
         return df.to_dict('records')
 
     def generate_transactions(self, num_transactions=100):
+        """Generates dummy transaction data for properties."""
         return [
             {
                 'property_id': np.random.randint(1, 501),
                 'transaction_date': self.fake.date_between(start_date='-5y', end_date='today'),
                 'transaction_amount': round(np.random.uniform(1000000, 10000000), 2)
-            } for _ in range(num_transactions)
+            }
+            for _ in range(num_transactions)
         ]
 
     def generate_market_trends(self):
+        """Generates dummy market trend data."""
         return [
             {
                 'year': year,
                 'location': location,
                 'avg_price_per_sqft': round(np.random.uniform(3000, 15000), 2)
-            } for year in range(2010, 2024)
+            }
+            for year in range(2010, 2024)
             for location in self.LOCALITIES
         ]
 
@@ -64,7 +64,7 @@ class RealEstateDataGenerator:
             conn = mysql.connector.connect(**self.config['database'])
             cursor = conn.cursor(dictionary=True)
 
-            # Properties Insertion
+            # Generate, clean, and insert properties
             properties = self.clean_properties(self.generate_properties())
             cursor.executemany("""
                 INSERT INTO Properties 
@@ -73,7 +73,7 @@ class RealEstateDataGenerator:
             """, properties)
             conn.commit()
 
-            # Transactions Insertion
+            # Generate and insert transactions
             transactions = self.generate_transactions()
             cursor.executemany("""
                 INSERT INTO Transactions 
@@ -82,7 +82,7 @@ class RealEstateDataGenerator:
             """, transactions)
             conn.commit()
 
-            # Market Trends Insertion
+            # Generate and insert market trends
             market_trends = self.generate_market_trends()
             cursor.executemany("""
                 INSERT INTO MarketTrends 
@@ -93,18 +93,30 @@ class RealEstateDataGenerator:
 
             logging.info(f"Successfully processed {len(properties)} properties, {len(transactions)} transactions, and market trends.")
             conn.close()
+
+            # Visualization
+            self.visualize_data()
+
         except mysql.connector.Error as err:
             logging.error(f"Database Error: {err}")
         except Exception as e:
             logging.error(f"Unexpected Error: {e}")
 
-def main():
-    try:
-        generator = RealEstateDataGenerator()
-        generator.insert_data()
-        print("Data generation completed successfully!")
-    except Exception as e:
-        print(f"Error in data generation: {e}")
+    def visualize_data(self):
+        gen = RealEstateDataGenerator()
+
+        # Market Trends
+        trends = pd.DataFrame(gen.generate_market_trends())
+        trends.groupby(['year', 'location'])['avg_price_per_sqft'].mean().unstack().plot(title="Market Trends")
+        plt.xlabel("Year"); plt.ylabel("Avg Price/Sqft"); plt.show()
+
+        # Property Distribution
+        pd.DataFrame(gen.generate_properties())['location'].value_counts().plot(kind='bar', title="Property Distribution")
+        plt.xlabel("Location"); plt.ylabel("Count"); plt.show()
+
+        # Transaction Amounts
+        pd.DataFrame(gen.generate_transactions())['transaction_amount'].plot(kind='hist', bins=10, title="Transaction Amounts", color='orange', edgecolor='black')
+        plt.xlabel("Amount"); plt.ylabel("Frequency"); plt.show()
 
 if __name__ == "__main__":
-    main()
+    RealEstateDataGenerator().insert_data()
